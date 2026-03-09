@@ -70,6 +70,8 @@ jobs:
           key: ${{ secrets.DEPLOY_KEY_DOCKER24 }}
           script: |
             cd ${{ env.DIR }}
+            chmod -R 775 /home/2208bu/storage /home/2208bu/bootstrap/cache
+            chown -R www-data:www-data /home/2208bu/storage /home/2208bu/bootstrap/cache
             make prod
 
   sms_end:
