@@ -1,0 +1,152 @@
+
+networks:
+  laravel:
+    external: true
+
+services:
+
+  # Основной локальный сервис проекта 2208bu.
+  2208bu:
+    container_name: 2208bu
+    depends_on:
+      db_bu:
+        condition: service_healthy
+    networks:
+      - laravel
+    build:
+      context: .
+      dockerfile: docker.2208bu.Dockerfile
+    working_dir: ${FOLDER_2208BU_SERV}
+    environment:
+      - PHPGROUP=www-data
+      - PHPUSER=www-data
+      - FOLDER=${FOLDER_2208BU_SERV}
+    healthcheck:
+      test: ["CMD-SHELL", "php-fpm -t || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    volumes:
+      - '${FOLDER_2208BU}:${FOLDER_2208BU_SERV}'
+
+
+  # Локальная БД переведена на PostgreSQL; старый MySQL-стек ниже сохранён как reference.
+  db_bu:
+    container_name: db_bu
+    image: postgres:16.4
+    networks:
+      - laravel
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${MYSQL_DB_BU_ROOT_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - '${MYSQL_DB_BU_FOLDER}:/var/lib/postgresql/data'
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -h 127.0.0.1 -p 5432 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+
+
+#  prometheus:
+#    image: prom/prometheus:latest
+#    container_name: prometheus
+#    volumes:
+#      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+#    ports:
+#      - "9090:9090"
+#    networks:
+#      - laravel
+#
+#
+#  grafana:
+#    image: grafana/grafana:latest
+#    container_name: grafana
+#    ports:
+#      - "3000:3000"
+#    volumes:
+#      - ./grafana-provisioning:/etc/grafana/provisioning
+#    environment:
+#      - GF_SECURITY_ADMIN_USER=admin
+#      - GF_SECURITY_ADMIN_PASSWORD=admin
+#    networks:
+#      - laravel
+
+#  phpmyadmin:
+#    image: phpmyadmin/phpmyadmin
+#    links:
+#      - mysql_db_master:db
+#    ports:
+#      - 6067:80
+#    environment:
+#      MYSQL_ROOT_PASSWORD: ${MYSQL_DB_ROOT_PASSWORD}
+#      UPLOAD_LIMIT: 300M
+#    depends_on:
+#      - mysql_db_master
+#    networks:
+#      - laravel
+
+#  2503master-queue:
+#    container_name: 2503master-queue
+#    depends_on:
+#      - 2503master
+#    links:
+#      - mysql_db_master:db_mysql
+#    networks:
+#      - laravel
+#    build:
+#      context: .
+#      dockerfile: docker.2503master.Dockerfile
+#    working_dir: ${FOLDER_2503MASTER_SERV}
+#    environment:
+#      - PHPGROUP=www-data
+#      - PHPUSER=www-data
+#      - FOLDER=${FOLDER_2503MASTER_SERV}
+#    restart: unless-stopped
+#    volumes:
+#      - '${FOLDER_2503MASTER}:${FOLDER_2503MASTER_SERV}'
+#    command: >
+#      sh -c "
+#        cd ${FOLDER_2503MASTER_SERV} &&
+#        php artisan queue:work database --queue=default,notifications --sleep=3 --tries=3 --daemon
+#      "
+
+#  2503master-scheduler:
+#    container_name: 2503master-scheduler
+#    depends_on:
+#      - 2503master
+#    networks:
+#      - laravel
+#    links:
+#      - mysql_db_master:db_mysql
+#    build:
+#      context: .
+#      dockerfile: docker.2503master.Dockerfile
+#    working_dir: ${FOLDER_2503MASTER_SERV}
+#    environment:
+#      - PHPGROUP=www-data
+#      - PHPUSER=www-data
+#      - FOLDER=${FOLDER_2503MASTER_SERV}
+##    restart: unless-stopped
+#    restart: always
+#    volumes:
+#      - '${FOLDER_2503MASTER}:${FOLDER_2503MASTER_SERV}'
+#    command: >
+#      sh -c "
+#        cd ${FOLDER_2503MASTER_SERV} &&
+#        while true; do php artisan schedule:run; sleep 60; done
+#      "
+#
+##    healthcheck:
+##      test: ["CMD", "curl", "-k", "-f", "https://stn.local"]
+##      interval: 30s
+##      timeout: 10s
+##      retries: 3
+##      start_period: 10s

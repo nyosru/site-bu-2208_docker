@@ -1,0 +1,10 @@
+scrape_configs:
+  - job_name: 'laravel-app'
+    scrape_interval: 10s
+    metrics_path: '/metrics'  # URL, где Laravel отдает метрики
+    static_configs:
+#      - targets: ['host.docker.internal:8000'] # или IP твоего приложения
+#      - targets: ['host.docker.internal:9000'] # или IP твоего приложения
+#      - targets: ['master.local'] # или IP твоего приложения
+#      - targets: ['2503master:8000'] # или IP твоего приложения
+      - targets: ['master.local'] # или IP твоего приложения

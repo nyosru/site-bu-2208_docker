@@ -1,0 +1,242 @@
+
+networks:
+  laravel:
+    external: true
+
+#volumes:
+#  cron_volume:
+#    driver: local
+#  portainer_data:
+
+services:
+
+
+
+  # Основной production-контейнер приложения 2208bu.
+  2208bu:
+    container_name: 2208bu
+    depends_on:
+      db_bu:
+        condition: service_healthy
+    networks:
+      - laravel
+    build:
+      context: .
+      dockerfile: docker.2208bu.Dockerfile
+    working_dir: ${FOLDER_2208BU_SERV}
+    environment:
+      - PHPGROUP=www-data
+      - PHPUSER=www-data
+      - FOLDER=${FOLDER_2208BU_SERV}
+    healthcheck:
+      test: ["CMD-SHELL", "php-fpm -t || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    volumes:
+      - '${FOLDER_2208BU}:${FOLDER_2208BU_SERV}'
+
+
+  # Production БД на PostgreSQL; прежняя MySQL-конфигурация оставлена ниже в комментариях.
+  db_bu:
+    container_name: db_bu
+    image: postgres:16.4
+    networks:
+      - laravel
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${MYSQL_DB_BU_ROOT_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - '${MYSQL_DB_BU_FOLDER}:/var/lib/postgresql/data'
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -h 127.0.0.1 -p 5432 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+
+
+#
+#
+#  db_mysql_master:
+#    container_name: db_mysql_master
+#    image: mariadb:10.7.8
+#    networks:
+#      - laravel
+#    environment:
+#      MYSQL_ROOT_HOST: "%"
+#      MYSQL_ROOT_PASSWORD: ${MYSQL_MASTER_DB_ROOT_PASSWORD}
+#    #    ports:
+#    #      - 3306:3306
+#    volumes:
+#      - '${MYSQL_DB_MASTER_FOLDER}:/var/lib/mysql'
+#    restart: unless-stopped
+#    healthcheck:
+#      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${MYSQL_MASTER_DB_ROOT_PASSWORD}"]
+#      interval: 10s
+#      timeout: 5s
+#      retries: 5
+#    logging:
+#      driver: "json-file"
+#      options:
+#        max-size: "10m"
+#        max-file: "3"
+#    deploy:
+#      resources:
+#        limits:
+#          cpus: "0.50"
+#          memory: 512M
+#        reservations:
+#          memory: 256M
+#
+#  #
+#  phpmyadmin2:
+#    image: phpmyadmin/phpmyadmin
+#
+#    links:
+#      - db_mysql_master:db
+#
+#    depends_on:
+#      db_mysql_master:
+#        condition: service_healthy
+#    ports:
+#      - 6063:80
+#    environment:
+#      MYSQL_ROOT_PASSWORD: ${MYSQL_MASTER_DB_ROOT_PASSWORD}
+#      UPLOAD_LIMIT: 300M
+#    #    depends_on:
+#    #      - db_mysql2
+#    networks:
+#      - laravel
+#    logging:
+#      driver: "json-file"
+#      options:
+#        max-size: "10m"
+#        max-file: "3"
+#
+#
+#  2503master:
+#    container_name: 2503master
+#    depends_on:
+#      - db_mysql_master
+#    #condition: service_healthy
+#    #    depends_on:
+#    #      - db_mysql2
+#    #    links:
+#    #      - db_mysql2:db
+#    networks:
+#      - laravel
+#    build:
+#      context: .
+#      dockerfile: docker.2503master.Dockerfile
+#    working_dir: ${FOLDER_2503MASTER_SERV}
+#    environment:
+#      - PHPGROUP=www-data
+#      - PHPUSER=www-data
+#      - FOLDER=${FOLDER_2503MASTER_SERV}
+#    restart: unless-stopped
+#    #    ports:
+#    #      - "9000:9001"
+#    expose:
+#      - 9000
+#    volumes:
+#      - '${FOLDER_2503MASTER}:${FOLDER_2503MASTER_SERV}'
+#    logging:
+#      driver: "json-file"
+#      options:
+#        max-size: "10m"
+#        max-file: "3"
+#    healthcheck:
+#      #      test: ["CMD", "curl", "-f", "https://процессмастер.рф/health"]
+#      #      test: ["CMD", "curl", "-f", "https://xn--80ajb0aifhffacm9b.xn--p1ai/health"]
+#      test: [ "CMD", "php", "artisan", "--version" ]
+#      interval: 60s
+#      timeout: 10s
+#      retries: 2
+#      start_period: 10s
+#    deploy:
+#      resources:
+#        limits:
+#          cpus: "0.50"
+#          memory: 512M
+#        reservations:
+#          memory: 256M
+#
+#  2503master-queue:
+#    container_name: 2503master-queue
+#    depends_on:
+#      - db_mysql_master
+#      - 2503master
+#    #    links:
+#    #      - db_mysql2:db
+#    networks:
+#      - laravel
+#    build:
+#      context: .
+#      dockerfile: docker.2503master.Dockerfile
+#    working_dir: ${FOLDER_2503MASTER_SERV}
+#    environment:
+#      - PHPGROUP=www-data
+#      - PHPUSER=www-data
+#      - FOLDER=${FOLDER_2503MASTER_SERV}
+#    #    restart: unless-stopped
+#    restart: always
+#    volumes:
+#      - '${FOLDER_2503MASTER}:${FOLDER_2503MASTER_SERV}'
+#    command: >
+#      sh -c "
+#        cd ${FOLDER_2503MASTER_SERV} &&
+#        php artisan queue:work --queue="default,notifications" --sleep=1 --tries=3
+#      "
+#    deploy:
+#      resources:
+#        limits:
+#          cpus: "0.30"
+#          memory: 512M
+#        reservations:
+#          memory: 256M
+#
+#  2503master-scheduler:
+#    container_name: 2503master-scheduler
+#    depends_on:
+#      - db_mysql_master
+##      db_mysql2:
+##        condition: service_healthy
+#    #    depends_on:
+#    #      - db_mysql2
+#    #      - 2503master
+#    #    links:
+#    #      - db_mysql2:db
+#    networks:
+#      - laravel
+#    build:
+#      context: .
+#      dockerfile: docker.2503master.Dockerfile
+#    working_dir: ${FOLDER_2503MASTER_SERV}
+#    environment:
+#      - PHPGROUP=www-data
+#      - PHPUSER=www-data
+#      - FOLDER=${FOLDER_2503MASTER_SERV}
+#    #    restart: unless-stopped
+#    restart: always
+#    volumes:
+#      - '${FOLDER_2503MASTER}:${FOLDER_2503MASTER_SERV}'
+#    command: >
+#      sh -c "
+#        cd ${FOLDER_2503MASTER_SERV} &&
+#        while true; do php artisan schedule:run; sleep 60; done
+#      "
+#    deploy:
+#      resources:
+#        limits:
+#          cpus: "0.30"
+#          memory: 512M
+#        reservations:
+#          memory: 256M
+#

@@ -1,0 +1,93 @@
+name: Deploy to VPS with Git Reset
+
+env:
+  VPS_IP: 91.218.230.97
+  VPS_USERNAME: root
+  DIR: /home/bu_docker
+  GIT_BRANCH: origin/main
+  GITHUB_USERNAME: nyosru
+  GIT_REPO: site-bu-2208_docker.git
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+
+
+  sms_start:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send deployment start notification
+        uses: appleboy/telegram-action@master
+        with:
+          to: 360209578, phpcat
+          token: ${{ secrets.TELEGRAM_TOKEN }}
+          message: |
+            🚀🚀🚀 Начинаем деплой ${{ github.repository }}
+            👨🏻‍💻 ${{ github.actor }} (${{ github.run_id }})
+            📝 ${{ github.event.head_commit.message }}
+
+  deploy:
+    runs-on: ubuntu-latest
+    outputs:
+      rebuild_needed: ${{ steps.check_commit.outputs.rebuild_needed }}
+      rebuild2503master: ${{ steps.check_commit.outputs.rebuild2503master }}
+      rebuildCaddy: ${{ steps.check_commit.outputs.rebuildCaddy }}
+    steps:
+      - name: Check commit message
+        id: check_commit
+        run: |
+          check_rebuild() {
+            [[ "${{ github.event.head_commit.message }}" == *"[$1+"* ]] && echo "true" || echo "false"
+          }
+          echo "rebuild_needed=$(check_rebuild 'rebuild')" >> $GITHUB_OUTPUT
+          echo "rebuild2503master=$(check_rebuild 'rebuild2503master')" >> $GITHUB_OUTPUT
+          echo "rebuildCaddy=$(check_rebuild 'rebuildCaddy')" >> $GITHUB_OUTPUT
+
+      - name: "Refresh git & base config"
+        #if: ${{ always() }}
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ env.VPS_IP }}
+          username: ${{ env.VPS_USERNAME }}
+          key: ${{ secrets.DEPLOY_KEY_DOCKER24 }}
+          script: |
+            cd ${{ env.DIR }}
+            git fetch --all
+            git reset --hard ${{ env.GIT_BRANCH }}
+
+  deploy_composer:
+    runs-on: ubuntu-latest
+    needs: deploy
+    steps:
+      - name: Conditional steps
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ env.VPS_IP }}
+          username: ${{ env.VPS_USERNAME }}
+          key: ${{ secrets.DEPLOY_KEY_DOCKER24 }}
+          script: |
+            cd ${{ env.DIR }}
+            make prod
+
+  sms_end:
+    runs-on: ubuntu-latest
+    needs: [deploy_composer]
+    steps:
+      - name: send telega
+        uses: appleboy/telegram-action@master
+        with:
+          to: 360209578, phpcat,
+          token: ${{ secrets.TELEGRAM_TOKEN }}
+          message: |
+            🍀🍀🍀 Deployment Report
+            Repo: ${{ github.repository }}
+            Commit: ${{ github.event.head_commit.message || '-' }}
+            By: ${{ github.actor }} (Run ID: ${{ github.run_id }})
+
+            🔧 Rebuild Needed: ${{ needs.deploy.outputs.rebuild_needed || '--' }}
+            🖥️ 2503master Rebuild: ${{ needs.deploy.outputs.rebuild2503master || '--' }}
+            🔐 Caddy Update: ${{ needs.deploy.outputs.rebuildCaddy || '--' }}
+            if [ "${{ needs.deploy.outputs.rebuildCaddy }}" == 'true' ]; then rebuildCaddy+  fi
