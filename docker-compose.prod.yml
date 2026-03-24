@@ -12,9 +12,8 @@ services:
 
 
 
-  # Основной production-контейнер приложения 2208bu.
-  2208bu:
-    container_name: 2208bu
+  2208bu_site:
+    container_name: 2208bu_site
     depends_on:
       db_bu:
         condition: service_healthy
@@ -29,7 +28,7 @@ services:
       - PHPUSER=www-data
       - FOLDER=${FOLDER_2208BU_SERV}
     healthcheck:
-      test: ["CMD-SHELL", "php-fpm -t || exit 1"]
+      test: [ "CMD-SHELL", "php-fpm -t || exit 1" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -39,7 +38,7 @@ services:
       - '${FOLDER_2208BU}:${FOLDER_2208BU_SERV}'
 
 
-  # Production БД на PostgreSQL; прежняя MySQL-конфигурация оставлена ниже в комментариях.
+
   db_bu:
     container_name: db_bu
     image: postgres:16.4
@@ -48,8 +47,6 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${MYSQL_DB_BU_ROOT_PASSWORD}
-#    ports:
-#      - "5432:5432"
     volumes:
       - '${MYSQL_DB_BU_FOLDER}:/var/lib/postgresql/data'
     healthcheck:
