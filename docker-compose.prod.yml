@@ -38,6 +38,32 @@ services:
       - '${FOLDER_2208BU}:${FOLDER_2208BU_SERV}'
 
 
+  2208bu_site_dev:
+    container_name: 2208bu_site_dev
+    depends_on:
+      db_bu:
+        condition: service_healthy
+    networks:
+      - laravel
+    build:
+      context: .
+      dockerfile: docker.2208bu_dev.Dockerfile
+    working_dir: ${FOLDER_2208BU_DEV_SERV}
+    environment:
+      - PHPGROUP=www-data
+      - PHPUSER=www-data
+      - FOLDER=${FOLDER_2208BU_DEV_SERV}
+    healthcheck:
+      test: [ "CMD-SHELL", "php-fpm -t || exit 1" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    volumes:
+      - '${FOLDER_2208BU_DEV}:${FOLDER_2208BU_DEV_SERV}'
+
+
 
   db_bu:
     container_name: db_bu

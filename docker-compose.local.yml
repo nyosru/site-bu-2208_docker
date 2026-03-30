@@ -1,28 +1,39 @@
-
 networks:
   laravel:
     external: true
+  tech_bu:
+
+volumes:
+  grafana_data:
+  prometheus_data:
+  glitchtip-postgres-data:
+  glitchtip-uploads:
+  kafka_data:
 
 services:
 
-  # Основной локальный сервис проекта 2208bu.
-  2208bu:
-    container_name: 2208bu
+  2208bu_site:
+    container_name: 2208bu_site
     depends_on:
       db_bu:
         condition: service_healthy
     networks:
       - laravel
+      - tech_bu
+
+#    ports:
+#      - "9000:9000"
     build:
       context: .
       dockerfile: docker.2208bu.Dockerfile
     working_dir: ${FOLDER_2208BU_SERV}
+
     environment:
       - PHPGROUP=www-data
       - PHPUSER=www-data
       - FOLDER=${FOLDER_2208BU_SERV}
     healthcheck:
-      test: ["CMD-SHELL", "php-fpm -t || exit 1"]
+      test: [ "CMD-SHELL", "php-fpm -t || exit 1" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -31,122 +42,240 @@ services:
     volumes:
       - '${FOLDER_2208BU}:${FOLDER_2208BU_SERV}'
 
+  2208bu_kafka_consumer:
+    container_name: 2208bu_kafka_consumer
+    depends_on:
+      2208bu_site:
+        condition: service_healthy
+      kafka_bu:
+        condition: service_started
+    networks:
+      - tech_bu
+    build:
+      context: .
+      dockerfile: docker.2208bu.Dockerfile
+    working_dir: ${FOLDER_2208BU_SERV}
+    environment:
+      - PHPGROUP=www-data
+      - PHPUSER=www-data
+      - FOLDER=${FOLDER_2208BU_SERV}
+    command: [ "php", "artisan", "kafka:consume-advertisement-tasks" ]
+    restart: unless-stopped
+    volumes:
+      - '${FOLDER_2208BU}:${FOLDER_2208BU_SERV}'
 
-  # Локальная БД переведена на PostgreSQL; старый MySQL-стек ниже сохранён как reference.
   db_bu:
     container_name: db_bu
     image: postgres:16.4
     networks:
-      - laravel
+      - tech_bu
+
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${MYSQL_DB_BU_ROOT_PASSWORD}
-    ports:
-      - "5432:5432"
+#    ports:
+#      - "5432:5432"
     volumes:
       - '${MYSQL_DB_BU_FOLDER}:/var/lib/postgresql/data'
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -h 127.0.0.1 -p 5432 || exit 1"]
+      test: [ "CMD-SHELL", "pg_isready -U postgres -h 127.0.0.1 -p 5432 || exit 1" ]
       interval: 30s
       timeout: 5s
       retries: 5
       start_period: 20s
     restart: unless-stopped
 
+  adminer_bu:
+    image: adminer:latest
+    container_name: adminer_bu
+    restart: unless-stopped
+    depends_on:
+      db_bu:
+        condition: service_healthy
+    ports:
+      - "8081:8080"
+    networks:
+      - tech_bu
 
 
-#  prometheus:
-#    image: prom/prometheus:latest
-#    container_name: prometheus
-#    volumes:
-#      - ./prometheus.yml:/etc/prometheus/prometheus.yml
-#    ports:
-#      - "9090:9090"
-#    networks:
+  prometheus_bu:
+    image: prom/prometheus:latest
+    container_name: prometheus_bu
+    restart: unless-stopped
+    networks:
 #      - laravel
-#
-#
-#  grafana:
-#    image: grafana/grafana:latest
-#    container_name: grafana
-#    ports:
-#      - "3000:3000"
-#    volumes:
-#      - ./grafana-provisioning:/etc/grafana/provisioning
-#    environment:
-#      - GF_SECURITY_ADMIN_USER=admin
-#      - GF_SECURITY_ADMIN_PASSWORD=admin
-#    networks:
-#      - laravel
+      - tech_bu
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
 
-#  phpmyadmin:
-#    image: phpmyadmin/phpmyadmin
-#    links:
-#      - mysql_db_master:db
-#    ports:
-#      - 6067:80
-#    environment:
-#      MYSQL_ROOT_PASSWORD: ${MYSQL_DB_ROOT_PASSWORD}
-#      UPLOAD_LIMIT: 300M
-#    depends_on:
-#      - mysql_db_master
-#    networks:
+  grafana_bu:
+    image: grafana/grafana:latest
+    container_name: grafana_bu
+    restart: unless-stopped
+    networks:
 #      - laravel
+      - tech_bu
 
-#  2503master-queue:
-#    container_name: 2503master-queue
-#    depends_on:
-#      - 2503master
-#    links:
-#      - mysql_db_master:db_mysql
-#    networks:
-#      - laravel
-#    build:
-#      context: .
-#      dockerfile: docker.2503master.Dockerfile
-#    working_dir: ${FOLDER_2503MASTER_SERV}
-#    environment:
-#      - PHPGROUP=www-data
-#      - PHPUSER=www-data
-#      - FOLDER=${FOLDER_2503MASTER_SERV}
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAPHANA_ADMIN_LOGIN}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAPHANA_ADMIN_PASS}
+    volumes:
+      - grafana_data:/var/lib/grafana
+
+
+#  node_exporter:
+#    image: prom/node-exporter:latest
+#    container_name: node_exporter
 #    restart: unless-stopped
-#    volumes:
-#      - '${FOLDER_2503MASTER}:${FOLDER_2503MASTER_SERV}'
-#    command: >
-#      sh -c "
-#        cd ${FOLDER_2503MASTER_SERV} &&
-#        php artisan queue:work database --queue=default,notifications --sleep=3 --tries=3 --daemon
-#      "
-
-#  2503master-scheduler:
-#    container_name: 2503master-scheduler
-#    depends_on:
-#      - 2503master
 #    networks:
-#      - laravel
-#    links:
-#      - mysql_db_master:db_mysql
-#    build:
-#      context: .
-#      dockerfile: docker.2503master.Dockerfile
-#    working_dir: ${FOLDER_2503MASTER_SERV}
-#    environment:
-#      - PHPGROUP=www-data
-#      - PHPUSER=www-data
-#      - FOLDER=${FOLDER_2503MASTER_SERV}
-##    restart: unless-stopped
-#    restart: always
-#    volumes:
-#      - '${FOLDER_2503MASTER}:${FOLDER_2503MASTER_SERV}'
-#    command: >
-#      sh -c "
-#        cd ${FOLDER_2503MASTER_SERV} &&
-#        while true; do php artisan schedule:run; sleep 60; done
-#      "
+##      - laravel
+#      - tech_bu
 #
-##    healthcheck:
-##      test: ["CMD", "curl", "-k", "-f", "https://stn.local"]
-##      interval: 30s
-##      timeout: 10s
-##      retries: 3
-##      start_period: 10s
+#    ports:
+#      - "9100:9100"
+#    command:
+#      - '--path.rootfs=/host'
+#    pid: host
+#    volumes:
+##      - '/:/host:ro,rslave'
+#      - '/:/host:ro'
+#
+#  cadvisor:
+#    image: gcr.io/cadvisor/cadvisor:latest
+#    container_name: cadvisor
+#    restart: unless-stopped
+#    networks:
+#      - tech_bu
+#    ports:
+#      - "8082:8080"
+#    privileged: true
+#    devices:
+#      - /dev/kmsg
+#    volumes:
+#      - /:/rootfs:ro
+#      - /var/run:/var/run:rw
+#      - /sys:/sys:ro
+#      - /var/lib/docker:/var/lib/docker:ro
+#
+#  postgres_exporter:
+#    image: prometheuscommunity/postgres-exporter:latest
+#    container_name: postgres_exporter
+#    restart: unless-stopped
+#    networks:
+#      - tech_bu
+#    ports:
+#      - "9187:9187"
+#    environment:
+#      DATA_SOURCE_NAME: "postgresql://postgres:${MYSQL_DB_BU_ROOT_PASSWORD}@db_bu:5432/postgres?sslmode=disable"
+#    depends_on:
+#      db_bu:
+#        condition: service_healthy
+#
+  glitchtip-postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: trust
+    volumes:
+      - glitchtip-postgres-data:/var/lib/postgresql/data
+
+  glitchtip-redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+  glitchtip-web:
+    image: glitchtip/glitchtip:latest
+    restart: unless-stopped
+    depends_on:
+      - glitchtip-postgres
+      - glitchtip-redis
+    env_file:
+      - .env.glitchtip
+    environment:
+      DATABASE_URL: postgres://postgres@glitchtip-postgres:5432/postgres
+      REDIS_URL: redis://glitchtip-redis:6379/1
+      EMAIL_URL: consolemail://
+      PORT: 8000
+      GLITCHTIP_DOMAIN: ${GLITCHTIP_DOMAIN:-http://localhost:8095}
+    ports:
+      - "8095:8000"
+    volumes:
+      - glitchtip-uploads:/code/uploads
+
+  glitchtip-worker:
+    image: glitchtip/glitchtip:latest
+    restart: unless-stopped
+    depends_on:
+      - glitchtip-postgres
+      - glitchtip-redis
+    env_file:
+      - .env.glitchtip
+    environment:
+      DATABASE_URL: postgres://postgres@glitchtip-postgres:5432/postgres
+      REDIS_URL: redis://glitchtip-redis:6379/1
+      EMAIL_URL: consolemail://
+      PORT: 8000
+      SERVER_ROLE: worker
+      GLITCHTIP_DOMAIN: ${GLITCHTIP_DOMAIN:-http://localhost:8095}
+    volumes:
+      - glitchtip-uploads:/code/uploads
+
+  glitchtip-migrate:
+    image: glitchtip/glitchtip:latest
+    depends_on:
+      - glitchtip-postgres
+      - glitchtip-redis
+    env_file:
+      - .env.glitchtip
+    environment:
+      DATABASE_URL: postgres://postgres@glitchtip-postgres:5432/postgres
+      REDIS_URL: redis://glitchtip-redis:6379/1
+      EMAIL_URL: consolemail://
+      PORT: 8000
+      GLITCHTIP_DOMAIN: ${GLITCHTIP_DOMAIN:-http://localhost:8095}
+    command: ./manage.py migrate
+    volumes:
+      - glitchtip-uploads:/code/uploads
+
+  kafka_bu:
+    image: apache/kafka:latest
+    container_name: kafka_bu
+    restart: unless-stopped
+    networks:
+      - tech_bu
+    ports:
+      - "9094:9094"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9094
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka_bu:9092,EXTERNAL://localhost:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka_bu:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+
+  kafka_ui_bu:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka_ui_bu
+    restart: unless-stopped
+    depends_on:
+      - kafka_bu
+    networks:
+      - tech_bu
+    ports:
+      - "8083:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka_bu:9092
+      KAFKA_CLUSTERS_0_READONLY: "false"
